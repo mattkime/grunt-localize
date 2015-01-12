@@ -1,0 +1,19 @@
+{
+  "name": "grunt-localize",
+  "description": "parse js, extract xlf keys, xlf keys to js",
+  "version": "0.1",
+  "author": {
+    "name": "Matt Kime"
+  },
+  "engines": {
+    "node": ">=0.8.0"
+  },
+  "dependencies": {
+    "q": "~1.0.1",
+    "xpath": "0.0.7",
+    "xmldom": "~0.1.19",
+    "acorn": "~0.6.0",
+    "handlebars": "~1.3.0"
+  },
+  "devDependencies": {}
+}
