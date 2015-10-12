@@ -6,15 +6,6 @@
 		return arr.map( function( fileObj ){ return fileObj.src[0] } );
 	};
 
-	var clone = function( object ){
-		var cloned = {};
-		Object.keys( object ).map( function ( key ) {
-			cloned[ key ] = object[ key ];
-		});
-
-		return cloned;
-	};
-
 	grunt.registerMultiTask( 'localize', 'localize!', function() {
 		var fs = require( 'fs' ),
 			xpath = require( 'xpath' ),
@@ -44,26 +35,33 @@
 			}) );
 		};
 
+		var isTrnCall = function( node ){
+			return ( node.callee.property && node.callee.property.name === "trn" ) || node.callee.name === "trn";
+		};
+
+		var isHbsJsTrnCall = function( node ){
+			return node.callee.object &&
+				( node.callee.object.object && node.callee.object.object.name === "helpers" ) &&
+				( node.callee.object.property && node.callee.object.property.name === "trn" ) &&
+				( node.callee.property && node.callee.property.name === "call" )
+		};
+
 		var jsToTrns = function( filePath ){
 			var deferred = Q.defer();
 
 			fs.readFile(filePath, function(err, data) {
 				var tree = acorn.parse( data ),
-					translations = {};
+					translations = [];
 
-				walk.simple( tree, { "CallExpression" : function( a ){
-					// mk - need to verify that is child of Meetup object
-					if( ( a.callee.property && a.callee.property.name === "trn" ) ){
-						translations[ a.arguments[0].value ] = a.arguments[1].value;
+				walk.simple( tree, { "CallExpression" : function( node ){
+					if( isTrnCall(node) ){
+						translations.push( node.arguments[0].value );
+					}
+
+					if( isHbsJsTrnCall(node) ) {
+						translations.push( node.arguments[1].value );
 					}
 				}
-				/*
-				,"MemberExpression":function(a){
-						// mk - this finds Meetup.trn but doesn't give args
-						if( a.object.name == "Meetup" && a.property.name === "trn"){
-							//console.log(a);
-						}
-					}*/
 				});
 				deferred.resolve( translations );
 			});
@@ -72,28 +70,27 @@
 		};
 
 		var translateTrns = function ( xlfDoms, filePath ){
-			return function ( trnObj ) {
+			return function ( trnKeys ) {
 				grunt.log.write( 'processing: ', filePath, '\n' );
 
 				return Q.all(
 					xlfDoms.map( function( xlfDom ){
 						var lang = xpath.select( '//file/@target-language', xlfDom )[0].nodeValue,
 							trndPath = filePath.substr( 0, filePath.lastIndexOf( '.' ) ) + '_' + lang + '.js',
-							trns = clone( trnObj ),
+							trnObj = {},
+							re = /'/g,
 							deferred = Q.defer();
 
-						Object.keys(trns).forEach( function( value, index ){
+						trnKeys.forEach( function( value, index ){
 							var nodes = xpath.select( "//trans-unit[@id='" + value + "']/target", xlfDom );
 							if( nodes.length ){
-								trns[value] = nodes[0].textContent.replace("'","\\'");
-							} else {
-								delete trns[value];
+								trnObj[value] = nodes[0].textContent.replace(re, "\\'").replace(/\n/g,"");
 							}
 						});
 
 						grunt.log.write( 'saving:', trndPath, '\n' );
 
-						fs.writeFile( trndPath, template( trns ), function( err ) {
+						fs.writeFile( trndPath, template( trnObj ), function( err ) {
 							if(err) {
 								deferred.reject( err );
 							} else {
